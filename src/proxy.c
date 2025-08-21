@@ -1,5 +1,5 @@
 /**
- * proxy转发模块实现
+ * Proxy Forwarding Module Implementation
  */
 
 #include <stdio.h>
@@ -46,7 +46,7 @@ static int connect_to_server(const char *host, int port, upstream_error_t *error
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     
-    // DNS解析
+    // DNS resolution
     int dns_result = getaddrinfo(host, port_str, &hints, &res);
     if (dns_result != 0) {
         log_error("DNS resolution failed: %s:%d - %s", host, port, gai_strerror(dns_result));
@@ -124,7 +124,7 @@ static void send_upstream_error_page(int client_sock, int status_code, const cha
         "</html>",
         status_code, error_msg, status_code, error_msg, upstream_info ? upstream_info : "unknown");
     
-    // 构建HTTP响应头
+    // Build HTTP response headers
     int header_len = snprintf(response_headers, sizeof(response_headers),
         "HTTP/1.1 %d %s\r\n"
         "Server: X-Server\r\n"
@@ -135,11 +135,11 @@ static void send_upstream_error_page(int client_sock, int status_code, const cha
         "\r\n",
         status_code, error_msg, html_len);
     
-    // 分别发送响应头和响应体，确保完整性
+    // Send response headers and body separately to ensure integrity
     ssize_t bytes_written = 0;
     ssize_t total_to_write = header_len;
     
-    // 发送响应头
+    // Send response headers
     while (bytes_written < total_to_write) {
         ssize_t n = write(client_sock, response_headers + bytes_written, total_to_write - bytes_written);
         if (n <= 0) {
@@ -153,7 +153,7 @@ static void send_upstream_error_page(int client_sock, int status_code, const cha
         bytes_written += n;
     }
     
-    // 发送响应体
+    // Send response body
     bytes_written = 0;
     total_to_write = html_len;
     while (bytes_written < total_to_write) {
@@ -170,7 +170,7 @@ static void send_upstream_error_page(int client_sock, int status_code, const cha
     }
 }
 
-// 重写请求路径
+// Rewrite request path
 static char *rewrite_path(const char *original_path, const char *prefix) {
     if (original_path == NULL || prefix == NULL) {
         return NULL;
@@ -179,12 +179,12 @@ static char *rewrite_path(const char *original_path, const char *prefix) {
     size_t prefix_len = strlen(prefix);
     size_t path_len = strlen(original_path);
     
-    // 如果路径不以前缀开头，返回原始路径
+    // If path doesn't start with prefix, return original path
     if (strncmp(original_path, prefix, prefix_len) != 0) {
         return strdup(original_path);
     }
     
-    // 移除前缀，保留路径的其余部分
+    // Remove prefix, keep the rest of the path
     if (path_len <= prefix_len) {
         return strdup("/");
     } else {

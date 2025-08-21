@@ -1,5 +1,5 @@
 /**
- * 优化的HTTP解析器实现
+ * Optimized HTTP Parser Implementation
  */
 
 #include <stdio.h>
@@ -14,47 +14,47 @@
 #include "../include/http_optimized.h"
 #include "../include/logger.h"
 
-// 常量定义
+// Constant definitions
 #define MAX_HEADERS 100
 #define MAX_LINE_LENGTH 8192
 #define MAX_URI_LENGTH 2048
 
-// 前向声明
+// Forward declarations
 http_method_t parse_method(const char *method_str);
 void free_http_request(http_request_t *request);
 
-// 内联函数：获取高精度时间（纳秒）
+// Inline function: Get high-precision time (nanoseconds)
 static inline uint64_t get_time_ns(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
 }
 
-// 内联函数：安全的字符检查
+// Inline function: Safe character check
 static inline bool is_http_token_char(char c) {
     return c > 0x1F && c != 0x7F && c != ' ' && c != '\t' && c != '\r' && c != '\n';
 }
 
-// 内联函数：安全的头部值字符检查
+// Inline function: Safe header value character check
 static inline bool is_http_header_value_char(char c) {
     return c >= 0x20 && c != 0x7F;
 }
 
-// 创建HTTP解析器
+// Create HTTP parser
 http_parser_t *http_parser_create(void) {
     http_parser_t *parser = malloc(sizeof(http_parser_t));
     if (!parser) {
-        log_error("无法分配HTTP解析器内存");
+        log_error("Failed to allocate HTTP parser memory");
         return NULL;
     }
     
-    // 初始化解析器
+    // Initialize parser
     memset(parser, 0, sizeof(http_parser_t));
     parser->state = HTTP_PARSE_START;
     parser->request = malloc(sizeof(http_request_t));
     
     if (!parser->request) {
-        log_error("无法分配HTTP请求内存");
+        log_error("Failed to allocate HTTP request memory");
         free(parser);
         return NULL;
     }
@@ -63,7 +63,7 @@ http_parser_t *http_parser_create(void) {
     parser->request->headers = malloc(sizeof(http_header_t) * MAX_HEADERS);
     
     if (!parser->request->headers) {
-        log_error("无法分配HTTP头部内存");
+        log_error("Failed to allocate HTTP headers memory");
         free(parser->request);
         free(parser);
         return NULL;
@@ -72,7 +72,7 @@ http_parser_t *http_parser_create(void) {
     return parser;
 }
 
-// 销毁HTTP解析器
+// Destroy HTTP parser
 void http_parser_destroy(http_parser_t *parser) {
     if (!parser) return;
     
@@ -84,7 +84,7 @@ void http_parser_destroy(http_parser_t *parser) {
     free(parser);
 }
 
-// 重置HTTP解析器状态
+// Reset HTTP parser state
 void http_parser_reset(http_parser_t *parser) {
     if (!parser) return;
     
@@ -96,25 +96,25 @@ void http_parser_reset(http_parser_t *parser) {
     parser->content_length = 0;
     parser->chunked_transfer = false;
     
-    // 清空缓冲区
+    // Clear buffers
     memset(parser->method_buffer, 0, sizeof(parser->method_buffer));
     memset(parser->uri_buffer, 0, sizeof(parser->uri_buffer));
     memset(parser->version_buffer, 0, sizeof(parser->version_buffer));
     memset(parser->header_name_buffer, 0, sizeof(parser->header_name_buffer));
     memset(parser->header_value_buffer, 0, sizeof(parser->header_value_buffer));
     
-    // 重置请求结构
+    // Reset request structure
     if (parser->request) {
         free_http_request(parser->request);
         memset(parser->request, 0, sizeof(http_request_t));
         parser->request->headers = malloc(sizeof(http_header_t) * MAX_HEADERS);
         if (!parser->request->headers) {
-            log_error("重置时无法分配HTTP头部内存");
+            log_error("Failed to allocate HTTP headers memory during reset");
         }
     }
 }
 
-// 解析HTTP请求（状态机版本）
+// Parse HTTP request (state machine version)
 ssize_t http_parser_parse(http_parser_t *parser, const char *buffer, size_t buffer_len) {
     if (!parser || !buffer) return -1;
     
@@ -126,18 +126,18 @@ ssize_t http_parser_parse(http_parser_t *parser, const char *buffer, size_t buff
         
         switch (parser->state) {
             case HTTP_PARSE_START:
-                // 跳过前导空白字符
+                // Skip leading whitespace characters
                 if (c == ' ' || c == '\t' || c == '\r' || c == '\n') {
                     parser->pos++;
                     continue;
                 }
                 parser->state = HTTP_PARSE_METHOD;
                 parser->line_start = parser->pos;
-                // 继续解析方法
+                // Continue parsing method
                 
             case HTTP_PARSE_METHOD:
                 if (c == ' ') {
-                    // 方法解析完成
+                    // Method parsing completed
                     size_t method_len = parser->pos - parser->line_start;
                     if (method_len >= sizeof(parser->method_buffer)) {
                         parser->state = HTTP_PARSE_ERROR;
@@ -157,7 +157,7 @@ ssize_t http_parser_parse(http_parser_t *parser, const char *buffer, size_t buff
                 
             case HTTP_PARSE_URI:
                 if (c == ' ') {
-                    // URI解析完成
+                    // URI parsing completed
                     size_t uri_len = parser->pos - parser->line_start;
                     if (uri_len >= sizeof(parser->uri_buffer)) {
                         parser->state = HTTP_PARSE_ERROR;
@@ -177,7 +177,7 @@ ssize_t http_parser_parse(http_parser_t *parser, const char *buffer, size_t buff
                 
             case HTTP_PARSE_VERSION:
                 if (c == '\r' || c == '\n') {
-                    // 版本解析完成
+                    // Version parsing completed
                     size_t version_len = parser->pos - parser->line_start;
                     if (version_len >= sizeof(parser->version_buffer)) {
                         parser->state = HTTP_PARSE_ERROR;
@@ -186,27 +186,27 @@ ssize_t http_parser_parse(http_parser_t *parser, const char *buffer, size_t buff
                     strncpy(parser->version_buffer, buffer + parser->line_start, version_len);
                     parser->version_buffer[version_len] = '\0';
                     
-                    // 验证版本格式
+                    // Validate version format
                     if (strncmp(parser->version_buffer, "HTTP/", 5) != 0) {
                         parser->state = HTTP_PARSE_ERROR;
                         break;
                     }
                     
-                    // 设置请求方法
+                    // Set request method
                     parser->request->method = parse_method(parser->method_buffer);
                     if (parser->request->method == HTTP_UNKNOWN) {
                         parser->state = HTTP_PARSE_ERROR;
                         break;
                     }
                     
-                    // 设置路径
+                    // Set path
                     parser->request->path = strdup(parser->uri_buffer);
                     if (!parser->request->path) {
                         parser->state = HTTP_PARSE_ERROR;
                         break;
                     }
                     
-                    // 解析查询字符串
+                    // Parse query string
                     char *query_string = strchr(parser->request->path, '?');
                     if (query_string) {
                         *query_string = '\0';
@@ -225,7 +225,7 @@ ssize_t http_parser_parse(http_parser_t *parser, const char *buffer, size_t buff
                 
             case HTTP_PARSE_HEADER_NAME:
                 if (c == '\r' || c == '\n') {
-                    // 空行，头部解析完成
+                    // Empty line, header parsing completed
                     if (c == '\r' && parser->pos + 1 < buffer_len && buffer[parser->pos + 1] == '\n') {
                         parser->pos += 2;
                     } else {
@@ -233,7 +233,7 @@ ssize_t http_parser_parse(http_parser_t *parser, const char *buffer, size_t buff
                     }
                     parser->state = HTTP_PARSE_HEADER_END;
                 } else if (c == ':') {
-                    // 头部名称解析完成
+                    // Header name parsing completed
                     size_t name_len = parser->pos - parser->line_start;
                     if (name_len >= sizeof(parser->header_name_buffer)) {
                         parser->state = HTTP_PARSE_ERROR;
@@ -253,7 +253,7 @@ ssize_t http_parser_parse(http_parser_t *parser, const char *buffer, size_t buff
                 
             case HTTP_PARSE_HEADER_VALUE:
                 if (c == '\r' || c == '\n') {
-                    // 头部值解析完成
+                    // Header value parsing completed
                     size_t value_len = parser->pos - parser->line_start;
                     if (value_len >= sizeof(parser->header_value_buffer)) {
                         parser->state = HTTP_PARSE_ERROR;
@@ -262,14 +262,14 @@ ssize_t http_parser_parse(http_parser_t *parser, const char *buffer, size_t buff
                     strncpy(parser->header_value_buffer, buffer + parser->line_start, value_len);
                     parser->header_value_buffer[value_len] = '\0';
                     
-                    // 添加到请求头部
+                    // Add to request headers
                     if (parser->request->header_count < MAX_HEADERS) {
                         http_header_t *header = &parser->request->headers[parser->request->header_count];
                         header->name = strdup(parser->header_name_buffer);
                         header->value = strdup(parser->header_value_buffer);
                         parser->request->header_count++;
                         
-                        // 检查特殊头部
+                        // Check special headers
                         if (strcasecmp(parser->header_name_buffer, "Content-Length") == 0) {
                             parser->has_content_length = true;
                             parser->content_length = strtoul(parser->header_value_buffer, NULL, 10);
@@ -295,7 +295,7 @@ ssize_t http_parser_parse(http_parser_t *parser, const char *buffer, size_t buff
                 break;
                 
             case HTTP_PARSE_HEADER_END:
-                // 检查是否需要解析请求体
+                // Check if request body needs to be parsed
                 if (parser->has_content_length && parser->content_length > 0) {
                     parser->state = HTTP_PARSE_BODY;
                 } else if (parser->chunked_transfer) {
@@ -306,11 +306,11 @@ ssize_t http_parser_parse(http_parser_t *parser, const char *buffer, size_t buff
                 break;
                 
             case HTTP_PARSE_BODY:
-                // 简化处理：如果有Content-Length，检查是否足够
+                // Simplified handling: if Content-Length exists, check if sufficient
                 if (parser->has_content_length) {
                     size_t remaining = buffer_len - parser->pos;
                     if (remaining >= parser->content_length) {
-                        // 请求体完整
+                        // Request body complete
                         parser->request->body = malloc(parser->content_length + 1);
                         if (parser->request->body) {
                             memcpy(parser->request->body, buffer + parser->pos, parser->content_length);
@@ -320,11 +320,11 @@ ssize_t http_parser_parse(http_parser_t *parser, const char *buffer, size_t buff
                         }
                         parser->state = HTTP_PARSE_COMPLETE;
                     } else {
-                        // 需要更多数据
+                        // Need more data
                         return 0;
                     }
                 } else {
-                    // 没有Content-Length，认为解析完成
+                    // No Content-Length, consider parsing complete
                     parser->state = HTTP_PARSE_COMPLETE;
                 }
                 break;
@@ -335,7 +335,7 @@ ssize_t http_parser_parse(http_parser_t *parser, const char *buffer, size_t buff
         }
     }
     
-    // 更新统计信息
+    // Update statistics
     parser->bytes_processed += parser->pos - initial_pos;
     if (parser->state == HTTP_PARSE_COMPLETE) {
         parser->parse_count++;
@@ -347,21 +347,21 @@ ssize_t http_parser_parse(http_parser_t *parser, const char *buffer, size_t buff
     } else if (parser->state == HTTP_PARSE_COMPLETE) {
         return parser->pos;
     } else {
-        return 0; // 需要更多数据
+        return 0; // Need more data
     }
 }
 
-// 批量解析HTTP请求
+// Batch parse HTTP requests
 http_batch_result_t *http_parser_parse_batch(const char *buffer, size_t buffer_len, size_t max_requests) {
     http_batch_result_t *result = malloc(sizeof(http_batch_result_t));
     if (!result) {
-        log_error("无法分配批量解析结果内存");
+        log_error("Failed to allocate batch parse result memory");
         return NULL;
     }
     
     result->requests = malloc(sizeof(http_request_t *) * max_requests);
     if (!result->requests) {
-        log_error("无法分配请求数组内存");
+        log_error("Failed to allocate request array memory");
         free(result);
         return NULL;
     }
@@ -384,11 +384,11 @@ http_batch_result_t *http_parser_parse_batch(const char *buffer, size_t buffer_l
         
         ssize_t parsed = http_parser_parse(parser, buffer + pos, buffer_len - pos);
         if (parsed > 0) {
-            // 解析成功
+            // Parse successful
             result->requests[result->count] = malloc(sizeof(http_request_t));
             if (result->requests[result->count]) {
                 memcpy(result->requests[result->count], parser->request, sizeof(http_request_t));
-                // 深拷贝头部
+                // Deep copy headers
                 if (parser->request->headers && parser->request->header_count > 0) {
                     result->requests[result->count]->headers = malloc(sizeof(http_header_t) * parser->request->header_count);
                     if (result->requests[result->count]->headers) {
@@ -399,7 +399,7 @@ http_batch_result_t *http_parser_parse_batch(const char *buffer, size_t buffer_l
                         result->requests[result->count]->header_count = parser->request->header_count;
                     }
                 }
-                // 深拷贝其他字段
+                // Deep copy other fields
                 if (parser->request->path) {
                     result->requests[result->count]->path = strdup(parser->request->path);
                 }
@@ -419,10 +419,10 @@ http_batch_result_t *http_parser_parse_batch(const char *buffer, size_t buffer_l
             pos += parsed;
             result->total_bytes += parsed;
         } else if (parsed == 0) {
-            // 需要更多数据
+            // Need more data
             break;
         } else {
-            // 解析错误，跳过当前字符
+            // Parse error, skip current character
             pos++;
         }
     }
@@ -433,7 +433,7 @@ http_batch_result_t *http_parser_parse_batch(const char *buffer, size_t buffer_l
     return result;
 }
 
-// 释放批量解析结果
+// Free batch parse result
 void http_batch_result_destroy(http_batch_result_t *result) {
     if (!result) return;
     
@@ -448,7 +448,7 @@ void http_batch_result_destroy(http_batch_result_t *result) {
     free(result);
 }
 
-// 获取解析器统计信息
+// Get parser statistics
 void http_parser_get_stats(http_parser_t *parser, uint64_t *parse_time_ns, uint64_t *bytes_processed, uint32_t *parse_count) {
     if (!parser) return;
     
@@ -457,7 +457,7 @@ void http_parser_get_stats(http_parser_t *parser, uint64_t *parse_time_ns, uint6
     if (parse_count) *parse_count = parser->parse_count;
 }
 
-// 重置解析器统计信息
+// Reset parser statistics
 void http_parser_reset_stats(http_parser_t *parser) {
     if (!parser) return;
     
@@ -466,7 +466,7 @@ void http_parser_reset_stats(http_parser_t *parser) {
     parser->parse_count = 0;
 }
 
-// 优化的HTTP请求解析（兼容原有接口）
+// Optimized HTTP request parsing (compatible with original interface)
 int parse_http_request_optimized(int client_sock, http_request_t *request) {
     char buffer[8192];
     ssize_t bytes_read = recv(client_sock, buffer, sizeof(buffer) - 1, 0);
@@ -479,7 +479,7 @@ int parse_http_request_optimized(int client_sock, http_request_t *request) {
     return parse_http_request_from_buffer_optimized(buffer, bytes_read, request);
 }
 
-// 从缓冲区解析HTTP请求（优化版本）
+// Parse HTTP request from buffer (optimized version)
 int parse_http_request_from_buffer_optimized(const char *buffer, size_t buffer_len, http_request_t *request) {
     http_parser_t *parser = http_parser_create();
     if (!parser) {
@@ -489,10 +489,10 @@ int parse_http_request_from_buffer_optimized(const char *buffer, size_t buffer_l
     ssize_t result = http_parser_parse(parser, buffer, buffer_len);
     
     if (result > 0) {
-        // 复制解析结果
+        // Copy parse result
         memcpy(request, parser->request, sizeof(http_request_t));
         
-        // 深拷贝动态分配的内容
+        // Deep copy dynamically allocated content
         if (parser->request->path) {
             request->path = strdup(parser->request->path);
         }

@@ -1,6 +1,6 @@
 /**
- * 进程标题设置模块
- * 参考nginx实现，用于设置进程标题显示
+ * Process Title Setting Module
+ * Reference nginx implementation, used for setting process title display
  */
 
 #include <stdio.h>
@@ -11,7 +11,7 @@
 
 #include "../include/process_title.h"
 
-// 保存原始的argv和environ
+// Save original argv and environ
 static char **g_os_argv = NULL;
 static char *g_os_argv_last = NULL;
 
@@ -21,14 +21,14 @@ static char *g_os_argv_last = NULL;
 int init_process_title(int argc, char **argv, char **envp) {
     int i = 0;
     
-    // 保存原始argv
+    // Save original argv
     g_os_argv = argv;
     
-    // 找到最后一个环境变量的结束位置
+    // Find the end position of the last environment variable
     if (envp[0]) {
-        // 计算环境变量数量
+        // Calculate the number of environment variables
         for (i = 0; envp[i]; i++) {
-            // 计算环境变量占用的内存大小
+            // Calculate the memory size occupied by environment variables
         }
         g_os_argv_last = envp[i - 1] + strlen(envp[i - 1]) + 1;
     } else {
@@ -39,7 +39,7 @@ int init_process_title(int argc, char **argv, char **envp) {
 }
 
 /**
- * 设置进程标题
+ * Set process title
  */
 void setproctitle(const char *fmt, ...) {
     va_list args;
@@ -49,15 +49,15 @@ void setproctitle(const char *fmt, ...) {
         return;
     }
     
-    // 格式化标题字符串
+    // Format title string
     va_start(args, fmt);
     vsnprintf(title, sizeof(title), fmt, args);
     va_end(args);
     
-    // 清空原有的argv内存
+    // Clear original argv memory
     memset(g_os_argv[0], 0, g_os_argv_last - g_os_argv[0]);
     
-    // 设置新的进程标题
+    // Set new process title
     strncpy(g_os_argv[0], title, g_os_argv_last - g_os_argv[0] - 1);
     g_os_argv[1] = NULL;
 }

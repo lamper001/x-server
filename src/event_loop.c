@@ -1,7 +1,7 @@
 /**
- * 统一高性能事件驱动I/O框架实现
- * 合并原版和增强版的优点，提供最佳性能和稳定性
- * 参考Nginx和epoll/kqueue最佳实践
+ * Unified High-Performance Event-Driven I/O Framework Implementation
+ * Combines advantages of original and enhanced versions for optimal performance and stability
+ * References Nginx and epoll/kqueue best practices
  */
 
 #include <stdio.h>
@@ -32,27 +32,27 @@
 #error "不支持的操作系统"
 #endif
 
-// 高性能自旋锁结构体
+// High-performance spinlock structure
 typedef struct spinlock {
     atomic_int locked;
-    atomic_int contention_count;  // 竞争统计
+    atomic_int contention_count;  // Contention statistics
 } spinlock_t;
 
-// 统一事件处理器结构体
+// Unified event handler structure
 struct event_handler {
-    int fd;                                    // 文件描述符
-    event_callback_t read_cb;                  // 读事件回调
-    event_callback_t write_cb;                 // 写事件回调
-    void *arg;                                 // 回调参数
-    int events;                                // 关注的事件
-    atomic_int ref_count;                      // 引用计数
-    atomic_int active;                         // 活跃状态
-    struct timespec last_activity;             // 最后活动时间
-    uint64_t processing_count;                 // 处理次数
-    double avg_processing_time;                // 平均处理时间
+    int fd;                                    // File descriptor
+    event_callback_t read_cb;                  // Read event callback
+    event_callback_t write_cb;                 // Write event callback
+    void *arg;                                 // Callback argument
+    int events;                                // Monitored events
+    atomic_int ref_count;                      // Reference count
+    atomic_int active;                         // Active status
+    struct timespec last_activity;             // Last activity time
+    uint64_t processing_count;                 // Processing count
+    double avg_processing_time;                // Average processing time
 };
 
-// 哈希表节点
+// Hash table node
 typedef struct handler_node {
     int fd;
     event_handler_t *handler;
@@ -60,46 +60,46 @@ typedef struct handler_node {
     atomic_int ref_count;
 } handler_node_t;
 
-// 统一事件循环结构体
+// Unified event loop structure
 struct event_loop {
 #ifdef __linux__
-    int epoll_fd;                              // epoll文件描述符
-    struct epoll_event *events;                // epoll事件数组
+    int epoll_fd;                              // epoll file descriptor
+    struct epoll_event *events;                // epoll events array
 #else
-    int kqueue_fd;                             // kqueue文件描述符
-    struct kevent *events;                     // kqueue事件数组
+    int kqueue_fd;                             // kqueue file descriptor
+    struct kevent *events;                     // kqueue events array
 #endif
-    int max_events;                            // 最大事件数
-    int batch_size;                            // 批处理大小
-    int timeout_ms;                            // 超时时间（毫秒）
-    atomic_int stop;                           // 停止标志
-    pthread_t thread_id;                       // 事件循环线程ID
+    int max_events;                            // Maximum events
+    int batch_size;                            // Batch size
+    int timeout_ms;                            // Timeout (milliseconds)
+    atomic_int stop;                           // Stop flag
+    pthread_t thread_id;                       // Event loop thread ID
     
-    // 哈希表管理（高性能查找）
-    handler_node_t **handler_table;            // 事件处理器哈希表
-    int table_size;                            // 哈希表大小
-    pthread_rwlock_t *rwlocks;                 // 分段读写锁
-    atomic_int handler_count;                  // 处理器数量
-    atomic_int active_handlers;                // 活跃处理器数量
+    // Hash table management (high-performance lookup)
+    handler_node_t **handler_table;            // Event handler hash table
+    int table_size;                            // Hash table size
+    pthread_rwlock_t *rwlocks;                 // Segmented read-write locks
+    atomic_int handler_count;                  // Handler count
+    atomic_int active_handlers;                // Active handler count
     
-    // 性能统计
-    _Atomic uint64_t total_events_processed;    // 总处理事件数
-    _Atomic uint64_t batch_events_processed;    // 批处理事件数
-    _Atomic uint64_t error_count;               // 错误次数
-    _Atomic uint64_t timeout_count;             // 超时次数
-    _Atomic uint64_t lock_contention;           // 锁竞争统计
+    // Performance statistics
+    _Atomic uint64_t total_events_processed;    // Total events processed
+    _Atomic uint64_t batch_events_processed;    // Batch events processed
+    _Atomic uint64_t error_count;               // Error count
+    _Atomic uint64_t timeout_count;             // Timeout count
+    _Atomic uint64_t lock_contention;           // Lock contention statistics
     
-    // 时间统计
-    double avg_event_processing_time;          // 平均事件处理时间
-    double max_event_processing_time;          // 最大事件处理时间
-    double min_event_processing_time;          // 最小事件处理时间
-    spinlock_t stats_lock;                     // 统计锁
+    // Time statistics
+    double avg_event_processing_time;          // Average event processing time
+    double max_event_processing_time;          // Maximum event processing time
+    double min_event_processing_time;          // Minimum event processing time
+    spinlock_t stats_lock;                     // Statistics lock
     
-    // 主锁
-    pthread_mutex_t mutex;                     // 主互斥锁
+    // Main lock
+    pthread_mutex_t mutex;                     // Main mutex
 };
 
-// 自旋锁操作（优化版）
+// Spinlock operations (optimized version)
 static inline void spinlock_init(spinlock_t *lock) {
     atomic_init(&lock->locked, 0);
     atomic_init(&lock->contention_count, 0);
@@ -114,20 +114,20 @@ static inline void spinlock_lock(spinlock_t *lock) {
         spin_count++;
         
         if (spin_count > 100) {
-            // 自旋过多，让出CPU
+            // Too much spinning, yield CPU
             sched_yield();
             spin_count = 0;
             atomic_fetch_add(&lock->contention_count, 1);
         } else {
-            // 短暂自旋 - 跨平台兼容
+            // Brief spinning - cross-platform compatible
 #ifdef __x86_64__
             __asm__ volatile("pause");
 #elif defined(__aarch64__) || defined(__arm64__)
             __asm__ volatile("yield");
 #else
-            // 通用平台使用简单的延迟
+            // Generic platform uses simple delay
             for (volatile int i = 0; i < 10; i++) {
-                // 空循环作为延迟
+                // Empty loop as delay
             }
 #endif
         }
@@ -138,14 +138,14 @@ static inline void spinlock_unlock(spinlock_t *lock) {
     atomic_store(&lock->locked, 0);
 }
 
-// 获取当前时间（微秒）
+// Get current time (microseconds)
 static inline uint64_t get_time_us() {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (uint64_t)ts.tv_sec * 1000000 + (uint64_t)ts.tv_nsec / 1000;
 }
 
-// 优化的哈希函数
+// Optimized hash function
 static unsigned int hash_fd(int fd) {
     unsigned int hash = (unsigned int)fd;
     hash = ((hash << 13) ^ hash) ^ (hash >> 17);
@@ -153,12 +153,12 @@ static unsigned int hash_fd(int fd) {
     return hash;
 }
 
-// 获取哈希表索引
+// Get hash table index
 static unsigned int get_table_index(event_loop_t *loop, int fd) {
     return hash_fd(fd) % loop->table_size;
 }
 
-// 添加处理器到哈希表
+// Add handler to hash table
 static void add_handler_to_table(event_loop_t *loop, int fd, event_handler_t *handler) {
     unsigned int index = get_table_index(loop, fd);
     
@@ -178,7 +178,7 @@ static void add_handler_to_table(event_loop_t *loop, int fd, event_handler_t *ha
     pthread_rwlock_unlock(&loop->rwlocks[index]);
 }
 
-// 从哈希表删除处理器
+// Remove handler from hash table
 static event_handler_t *remove_handler_from_table(event_loop_t *loop, int fd) {
     unsigned int index = get_table_index(loop, fd);
     
@@ -207,36 +207,36 @@ static event_handler_t *remove_handler_from_table(event_loop_t *loop, int fd) {
     return handler;
 }
 
-// 设置文件描述符为非阻塞模式
+// Set file descriptor to non-blocking mode
 static int set_nonblocking(int fd) {
     int flags = fcntl(fd, F_GETFL, 0);
     if (flags == -1) {
-        log_error("获取文件描述符标志失败: %s", strerror(errno));
+        log_error("Failed to get file descriptor flags: %s", strerror(errno));
         return -1;
     }
     
     if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1) {
-        log_error("Set non-blocking mode失败: %s", strerror(errno));
+        log_error("Failed to set non-blocking mode: %s", strerror(errno));
         return -1;
     }
     
     return 0;
 }
 
-// 创建统一事件循环
+// Create unified event loop
 event_loop_t *event_loop_create(int max_events) {
     event_loop_t *loop = malloc(sizeof(event_loop_t));
     if (!loop) {
-        log_error("无法分配事件循环内存");
+        log_error("Failed to allocate event loop memory");
         return NULL;
     }
     
     memset(loop, 0, sizeof(event_loop_t));
     loop->max_events = max_events;
-    loop->batch_size = 1000;  // 默认批处理大小
-    loop->timeout_ms = 10;    // 默认10ms超时
+    loop->batch_size = 1000;  // Default batch size
+    loop->timeout_ms = 10;    // Default 10ms timeout
     
-    // 初始化原子变量
+    // Initialize atomic variables
     atomic_init(&loop->stop, 0);
     atomic_init(&loop->handler_count, 0);
     atomic_init(&loop->active_handlers, 0);
@@ -246,26 +246,26 @@ event_loop_t *event_loop_create(int max_events) {
     atomic_init(&loop->timeout_count, 0);
     atomic_init(&loop->lock_contention, 0);
     
-    // 初始化时间统计
+    // Initialize time statistics
     loop->avg_event_processing_time = 0.0;
     loop->max_event_processing_time = 0.0;
     loop->min_event_processing_time = 1e9;
     spinlock_init(&loop->stats_lock);
     
-    // 设置哈希表大小（4096个桶）
+    // Set hash table size (4096 buckets)
     loop->table_size = 4096;
     
-    // 初始化主互斥锁
+    // Initialize main mutex
     if (pthread_mutex_init(&loop->mutex, NULL) != 0) {
-        log_error("初始化互斥锁失败");
+        log_error("Failed to initialize mutex");
         free(loop);
         return NULL;
     }
     
-    // 初始化读写锁数组
+    // Initialize read-write lock array
     loop->rwlocks = malloc(sizeof(pthread_rwlock_t) * loop->table_size);
     if (!loop->rwlocks) {
-        log_error("无法分配读写锁数组内存");
+        log_error("Failed to allocate read-write lock array memory");
         pthread_mutex_destroy(&loop->mutex);
         free(loop);
         return NULL;
@@ -273,7 +273,7 @@ event_loop_t *event_loop_create(int max_events) {
     
     for (int i = 0; i < loop->table_size; i++) {
         if (pthread_rwlock_init(&loop->rwlocks[i], NULL) != 0) {
-            log_error("初始化读写锁失败");
+            log_error("Failed to initialize read-write lock");
             for (int j = 0; j < i; j++) {
                 pthread_rwlock_destroy(&loop->rwlocks[j]);
             }
@@ -284,10 +284,10 @@ event_loop_t *event_loop_create(int max_events) {
         }
     }
     
-    // 初始化哈希表
+    // Initialize hash table
     loop->handler_table = calloc(loop->table_size, sizeof(handler_node_t *));
     if (!loop->handler_table) {
-        log_error("无法分配哈希表内存");
+        log_error("Failed to allocate hash table memory");
         for (int i = 0; i < loop->table_size; i++) {
             pthread_rwlock_destroy(&loop->rwlocks[i]);
         }
@@ -298,10 +298,10 @@ event_loop_t *event_loop_create(int max_events) {
     }
     
 #ifdef __linux__
-    // 创建epoll实例
+    // Create epoll instance
     loop->epoll_fd = epoll_create1(0);
     if (loop->epoll_fd == -1) {
-        log_error("创建epoll实例失败: %s", strerror(errno));
+        log_error("Failed to create epoll instance: %s", strerror(errno));
         free(loop->handler_table);
         for (int i = 0; i < loop->table_size; i++) {
             pthread_rwlock_destroy(&loop->rwlocks[i]);
@@ -312,10 +312,10 @@ event_loop_t *event_loop_create(int max_events) {
         return NULL;
     }
     
-    // 分配事件数组
+    // Allocate events array
     loop->events = malloc(sizeof(struct epoll_event) * max_events);
     if (!loop->events) {
-        log_error("无法分配事件数组内存");
+        log_error("Failed to allocate events array memory");
         close(loop->epoll_fd);
         free(loop->handler_table);
         for (int i = 0; i < loop->table_size; i++) {
@@ -327,13 +327,13 @@ event_loop_t *event_loop_create(int max_events) {
         return NULL;
     }
     
-    log_info("统一事件循环创建成功 (epoll): max_events=%d, batch_size=%d, timeout_ms=%d", 
+    log_info("Unified event loop created successfully (epoll): max_events=%d, batch_size=%d, timeout_ms=%d", 
              max_events, loop->batch_size, loop->timeout_ms);
 #else
-    // 创建kqueue实例
+    // Create kqueue instance
     loop->kqueue_fd = kqueue();
     if (loop->kqueue_fd == -1) {
-        log_error("创建kqueue实例失败: %s", strerror(errno));
+        log_error("Failed to create kqueue instance: %s", strerror(errno));
         free(loop->handler_table);
         for (int i = 0; i < loop->table_size; i++) {
             pthread_rwlock_destroy(&loop->rwlocks[i]);
@@ -344,10 +344,10 @@ event_loop_t *event_loop_create(int max_events) {
         return NULL;
     }
     
-    // 分配事件数组
+    // Allocate events array
     loop->events = malloc(sizeof(struct kevent) * max_events);
     if (!loop->events) {
-        log_error("无法分配事件数组内存");
+        log_error("Failed to allocate events array memory");
         close(loop->kqueue_fd);
         free(loop->handler_table);
         for (int i = 0; i < loop->table_size; i++) {
@@ -359,20 +359,20 @@ event_loop_t *event_loop_create(int max_events) {
         return NULL;
     }
     
-    log_info("统一事件循环创建成功 (kqueue): max_events=%d, batch_size=%d, timeout_ms=%d", 
+    log_info("Unified event loop created successfully (kqueue): max_events=%d, batch_size=%d, timeout_ms=%d", 
              max_events, loop->batch_size, loop->timeout_ms);
 #endif
     
     return loop;
 }
 
-// 销毁统一事件循环
+// Destroy unified event loop
 void event_loop_destroy(event_loop_t *loop) {
     if (!loop) {
         return;
     }
     
-    log_info("正在销毁统一事件循环");
+    log_info("Destroying unified event loop");
     
     // Stop event loop
     event_loop_stop(loop);
@@ -382,7 +382,7 @@ void event_loop_destroy(event_loop_t *loop) {
         pthread_join(loop->thread_id, NULL);
     }
     
-    // 清理哈希表中的所有处理器
+    // Clean up all handlers in hash table
     for (int i = 0; i < loop->table_size; i++) {
         handler_node_t *current = loop->handler_table[i];
         while (current) {
@@ -397,7 +397,7 @@ void event_loop_destroy(event_loop_t *loop) {
         }
     }
     
-    // 清理读写锁数组
+    // Clean up read-write lock array
     if (loop->rwlocks) {
         for (int i = 0; i < loop->table_size; i++) {
             pthread_rwlock_destroy(&loop->rwlocks[i]);
@@ -405,7 +405,7 @@ void event_loop_destroy(event_loop_t *loop) {
         free(loop->rwlocks);
     }
     
-    // 清理哈希表
+    // Clean up hash table
     if (loop->handler_table) {
         free(loop->handler_table);
     }
@@ -427,25 +427,25 @@ void event_loop_destroy(event_loop_t *loop) {
     pthread_mutex_destroy(&loop->mutex);
     free(loop);
     
-    log_info("统一事件循环销毁完成");
+    log_info("Unified event loop destruction completed");
 }
 
-// 添加事件处理器
+// Add event handler
 int event_loop_add_handler(event_loop_t *loop, int fd, int events, 
                           event_callback_t read_cb, event_callback_t write_cb, void *arg) {
     if (!loop || fd < 0) {
         return -1;
     }
     
-    // 设置为非阻塞模式
+    // Set to non-blocking mode
     if (set_nonblocking(fd) != 0) {
         return -1;
     }
     
-    // 创建事件处理器
+    // Create event handler
     event_handler_t *handler = malloc(sizeof(event_handler_t));
     if (!handler) {
-        log_error("无法分配事件处理器内存");
+        log_error("Failed to allocate event handler memory");
         return -1;
     }
     
@@ -462,11 +462,11 @@ int event_loop_add_handler(event_loop_t *loop, int fd, int events,
     
     pthread_mutex_lock(&loop->mutex);
     
-    // 添加到哈希表
+    // Add to hash table
     add_handler_to_table(loop, fd, handler);
     
 #ifdef __linux__
-    // 添加到epoll
+    // Add to epoll
     struct epoll_event ev;
     ev.events = 0;
     if (events & EVENT_READ) {
@@ -475,18 +475,18 @@ int event_loop_add_handler(event_loop_t *loop, int fd, int events,
     if (events & EVENT_WRITE) {
         ev.events |= EPOLLOUT;
     }
-    ev.events |= EPOLLET; // 边缘触发模式
+    ev.events |= EPOLLET; // Edge-triggered mode
     ev.data.ptr = handler;
     
     if (epoll_ctl(loop->epoll_fd, EPOLL_CTL_ADD, fd, &ev) == -1) {
-        log_error("添加事件处理器失败: %s", strerror(errno));
+        log_error("Failed to add event handler: %s", strerror(errno));
         remove_handler_from_table(loop, fd);
         pthread_mutex_unlock(&loop->mutex);
         free(handler);
         return -1;
     }
 #else
-    // 添加到kqueue
+    // Add to kqueue
     struct kevent ev[2];
     int n = 0;
     
@@ -499,7 +499,7 @@ int event_loop_add_handler(event_loop_t *loop, int fd, int events,
     }
     
     if (kevent(loop->kqueue_fd, ev, n, NULL, 0, NULL) == -1) {
-        log_error("添加事件处理器失败: %s", strerror(errno));
+        log_error("Failed to add event handler: %s", strerror(errno));
         remove_handler_from_table(loop, fd);
         pthread_mutex_unlock(&loop->mutex);
         free(handler);
@@ -509,11 +509,11 @@ int event_loop_add_handler(event_loop_t *loop, int fd, int events,
     
     pthread_mutex_unlock(&loop->mutex);
     
-    log_debug("添加事件处理器成功: fd=%d, events=%d", fd, events);
+    log_debug("Event handler added successfully: fd=%d, events=%d", fd, events);
     return 0;
 }
 
-// 修改事件处理器
+// Modify event handler
 int event_loop_mod_handler(event_loop_t *loop, int fd, int events, 
                           event_callback_t read_cb, event_callback_t write_cb, void *arg) {
     if (!loop || fd < 0) {
@@ -533,10 +533,10 @@ int event_loop_mod_handler(event_loop_t *loop, int fd, int events,
     }
     ev.events |= EPOLLET;
     
-    // 创建新的事件处理器
+    // Create new event handler
     event_handler_t *handler = malloc(sizeof(event_handler_t));
     if (!handler) {
-        log_error("无法分配事件处理器内存");
+        log_error("Failed to allocate event handler memory");
         pthread_mutex_unlock(&loop->mutex);
         return -1;
     }
@@ -557,21 +557,21 @@ int event_loop_mod_handler(event_loop_t *loop, int fd, int events,
     if (epoll_ctl(loop->epoll_fd, EPOLL_CTL_MOD, fd, &ev) == -1) {
         if (errno == ENOENT) {
             if (epoll_ctl(loop->epoll_fd, EPOLL_CTL_ADD, fd, &ev) == -1) {
-                log_error("添加事件处理器失败: %s", strerror(errno));
+                log_error("Failed to add event handler: %s", strerror(errno));
                 pthread_mutex_unlock(&loop->mutex);
                 free(handler);
                 return -1;
             }
             add_handler_to_table(loop, fd, handler);
         } else {
-            log_error("修改事件处理器失败: %s", strerror(errno));
+            log_error("Failed to modify event handler: %s", strerror(errno));
             pthread_mutex_unlock(&loop->mutex);
             free(handler);
             return -1;
         }
     }
 #else
-    // kqueue修改逻辑
+    // kqueue modification logic
     struct kevent ev[4];
     int n = 0;
     
@@ -580,7 +580,7 @@ int event_loop_mod_handler(event_loop_t *loop, int fd, int events,
     
     event_handler_t *handler = malloc(sizeof(event_handler_t));
     if (!handler) {
-        log_error("无法分配事件处理器内存");
+        log_error("Failed to allocate event handler memory");
         pthread_mutex_unlock(&loop->mutex);
         return -1;
     }
@@ -605,7 +605,7 @@ int event_loop_mod_handler(event_loop_t *loop, int fd, int events,
     }
     
     if (kevent(loop->kqueue_fd, ev, n, NULL, 0, NULL) == -1) {
-        log_error("修改事件处理器失败: %s", strerror(errno));
+        log_error("Failed to modify event handler: %s", strerror(errno));
         pthread_mutex_unlock(&loop->mutex);
         free(handler);
         return -1;
@@ -614,11 +614,11 @@ int event_loop_mod_handler(event_loop_t *loop, int fd, int events,
     
     pthread_mutex_unlock(&loop->mutex);
     
-    log_debug("修改事件处理器成功: fd=%d, events=%d", fd, events);
+    log_debug("Event handler modified successfully: fd=%d, events=%d", fd, events);
     return 0;
 }
 
-// 删除事件处理器
+// Delete event handler
 int event_loop_del_handler(event_loop_t *loop, int fd) {
     if (!loop || fd < 0) {
         return -1;
@@ -631,7 +631,7 @@ int event_loop_del_handler(event_loop_t *loop, int fd) {
 #ifdef __linux__
     if (epoll_ctl(loop->epoll_fd, EPOLL_CTL_DEL, fd, NULL) == -1) {
         if (errno != ENOENT) {
-            log_error("删除事件处理器失败: %s", strerror(errno));
+            log_error("Failed to delete event handler: %s", strerror(errno));
             pthread_mutex_unlock(&loop->mutex);
             return -1;
         }
@@ -647,18 +647,18 @@ int event_loop_del_handler(event_loop_t *loop, int fd) {
     
     if (handler_to_free) {
         free(handler_to_free);
-        log_debug("删除事件处理器成功: fd=%d", fd);
+        log_debug("Event handler deleted successfully: fd=%d", fd);
     }
     
     return 0;
 }
 
-// 统一事件循环线程函数
+// Unified event loop thread function
 static void *event_loop_thread(void *arg) {
     event_loop_t *loop = (event_loop_t *)arg;
-    log_info("统一事件循环线程启动");
+    log_info("Unified event loop thread started");
     
-    // 设置线程信号掩码
+    // Set thread signal mask
     sigset_t set;
     sigemptyset(&set);
     sigaddset(&set, SIGTERM);
@@ -676,7 +676,7 @@ static void *event_loop_thread(void *arg) {
             if (errno == EINTR) {
                 continue;
             }
-            log_error("epoll_wait失败: %s", strerror(errno));
+            log_error("epoll_wait failed: %s", strerror(errno));
             atomic_fetch_add(&loop->error_count, 1);
             break;
         }
@@ -686,7 +686,7 @@ static void *event_loop_thread(void *arg) {
             continue;
         }
         
-        // 批处理事件
+        // Batch process events
         for (int i = 0; i < nfds && !atomic_load(&loop->stop); i++) {
             event_handler_t *handler = (event_handler_t *)loop->events[i].data.ptr;
             
@@ -697,7 +697,7 @@ static void *event_loop_thread(void *arg) {
             atomic_fetch_add(&handler->ref_count, 1);
             int fd = handler->fd;
             
-            // 处理错误事件
+            // Handle error events
             if (loop->events[i].events & (EPOLLERR | EPOLLHUP)) {
                 if (handler->read_cb) {
                     handler->read_cb(fd, handler->arg);
@@ -706,18 +706,18 @@ static void *event_loop_thread(void *arg) {
                 continue;
             }
             
-            // 处理读事件
+            // Handle read events
             if ((loop->events[i].events & EPOLLIN) && handler->read_cb) {
                 handler->read_cb(fd, handler->arg);
             }
             
-            // 检查handler是否仍然有效
+            // Check if handler is still valid
             if (handler->fd != fd) {
                 atomic_fetch_sub(&handler->ref_count, 1);
                 continue;
             }
             
-            // 处理写事件
+            // Handle write events
             if ((loop->events[i].events & EPOLLOUT) && handler->write_cb) {
                 handler->write_cb(fd, handler->arg);
             }
@@ -735,7 +735,7 @@ static void *event_loop_thread(void *arg) {
             if (errno == EINTR) {
                 continue;
             }
-            log_error("kevent失败: %s", strerror(errno));
+            log_error("kevent failed: %s", strerror(errno));
             atomic_fetch_add(&loop->error_count, 1);
             break;
         }
@@ -745,7 +745,7 @@ static void *event_loop_thread(void *arg) {
             continue;
         }
         
-        // 批处理事件
+        // Batch process events
         for (int i = 0; i < nfds && !atomic_load(&loop->stop); i++) {
             event_handler_t *handler = (event_handler_t *)loop->events[i].udata;
             
@@ -756,18 +756,18 @@ static void *event_loop_thread(void *arg) {
             atomic_fetch_add(&handler->ref_count, 1);
             int fd = handler->fd;
             
-            // 处理读事件
+            // Handle read events
             if (loop->events[i].filter == EVFILT_READ && handler->read_cb) {
                 handler->read_cb(fd, handler->arg);
             }
             
-            // 检查handler是否仍然有效
+            // Check if handler is still valid
             if (handler->fd != fd) {
                 atomic_fetch_sub(&handler->ref_count, 1);
                 continue;
             }
             
-            // 处理写事件
+            // Handle write events
             if (loop->events[i].filter == EVFILT_WRITE && handler->write_cb) {
                 handler->write_cb(fd, handler->arg);
             }
@@ -776,7 +776,7 @@ static void *event_loop_thread(void *arg) {
         }
 #endif
         
-        // 更新统计信息
+        // Update statistics
         uint64_t loop_end = get_time_us();
         uint64_t processing_time = loop_end - loop_start;
         
@@ -785,7 +785,7 @@ static void *event_loop_thread(void *arg) {
             atomic_fetch_add(&loop->batch_events_processed, nfds);
         }
         
-        // 更新时间统计（使用自旋锁保护）
+        // Update time statistics (protected by spinlock)
         spinlock_lock(&loop->stats_lock);
         
         uint64_t total_processed = atomic_load(&loop->total_events_processed);
@@ -804,41 +804,41 @@ static void *event_loop_thread(void *arg) {
         spinlock_unlock(&loop->stats_lock);
     }
     
-    log_info("统一事件循环线程退出");
+    log_info("Unified event loop thread exited");
     return NULL;
 }
 
-// 启动统一事件循环
+// Start unified event loop
 int event_loop_start(event_loop_t *loop) {
     if (!loop) {
         return -1;
     }
     
     if (pthread_create(&loop->thread_id, NULL, event_loop_thread, loop) != 0) {
-        log_error("创建统一事件循环线程失败");
+        log_error("Failed to create unified event loop thread");
         return -1;
     }
     
-    log_info("统一事件循环已启动");
+    log_info("Unified event loop started");
     return 0;
 }
 
-// 停止统一事件循环
+// Stop unified event loop
 void event_loop_stop(event_loop_t *loop) {
     if (!loop) {
         return;
     }
     
-    log_info("正在停止统一事件循环");
+    log_info("Stopping unified event loop");
     atomic_store(&loop->stop, 1);
     
-    // 如果事件循环线程存在，向其发送信号以中断可能的阻塞调用
+    // If event loop thread exists, send signal to interrupt possible blocking calls
     if (loop->thread_id != 0) {
         pthread_kill(loop->thread_id, SIGTERM);
     }
 }
 
-// 等待事件循环结束
+// Wait for event loop to end
 void event_loop_wait(event_loop_t *loop) {
     if (!loop || loop->thread_id == 0) {
         return;
@@ -847,10 +847,10 @@ void event_loop_wait(event_loop_t *loop) {
     pthread_join(loop->thread_id, NULL);
     loop->thread_id = 0;
     
-    log_info("统一事件循环线程已结束");
+    log_info("Unified event loop thread ended");
 }
 
-// 检查事件循环是否已停止
+// Check if event loop is stopped
 int event_loop_is_stopped(event_loop_t *loop) {
     if (!loop) {
         return 1;
@@ -859,7 +859,7 @@ int event_loop_is_stopped(event_loop_t *loop) {
     return atomic_load(&loop->stop);
 }
 
-// 获取事件循环统计信息
+// Get event loop statistics
 void event_loop_get_stats(event_loop_t *loop, int *handler_count, int *active_handlers) {
     if (!loop) {
         if (handler_count) *handler_count = 0;
@@ -875,7 +875,7 @@ void event_loop_get_stats(event_loop_t *loop, int *handler_count, int *active_ha
     }
 }
 
-// 获取详细统计信息
+// Get detailed statistics
 void event_loop_get_detailed_stats(event_loop_t *loop, event_loop_detailed_stats_t *stats) {
     if (!loop || !stats) {
         return;
@@ -898,7 +898,7 @@ void event_loop_get_detailed_stats(event_loop_t *loop, event_loop_detailed_stats
     spinlock_unlock(&loop->stats_lock);
 }
 
-// 重置统计信息
+// Reset statistics
 void event_loop_reset_stats(event_loop_t *loop) {
     if (!loop) {
         return;
@@ -916,32 +916,32 @@ void event_loop_reset_stats(event_loop_t *loop) {
     loop->min_event_processing_time = 1e9;
     spinlock_unlock(&loop->stats_lock);
     
-    log_info("统一事件循环统计信息已重置");
+    log_info("Unified event loop statistics reset");
 }
 
-// 设置批处理大小
+// Set batch size
 int event_loop_set_batch_size(event_loop_t *loop, int batch_size) {
     if (!loop || batch_size <= 0) {
         return -1;
     }
     
     loop->batch_size = batch_size;
-    log_info("批处理大小已更新为: %d", batch_size);
+    log_info("Batch size updated to: %d", batch_size);
     return 0;
 }
 
-// 设置超时时间
+// Set timeout
 int event_loop_set_timeout(event_loop_t *loop, int timeout_ms) {
     if (!loop || timeout_ms <= 0) {
         return -1;
     }
     
     loop->timeout_ms = timeout_ms;
-    log_info("超时时间已更新为: %dms", timeout_ms);
+    log_info("Timeout updated to: %dms", timeout_ms);
     return 0;
 }
 
-// 打印统计信息
+// Print statistics
 void event_loop_print_stats(event_loop_t *loop) {
     if (!loop) {
         return;
@@ -950,16 +950,16 @@ void event_loop_print_stats(event_loop_t *loop) {
     event_loop_detailed_stats_t stats;
     event_loop_get_detailed_stats(loop, &stats);
     
-    log_info("=== 统一事件循环统计信息 ===");
-    log_info("总处理事件数: %lu", stats.total_events_processed);
-    log_info("批处理事件数: %lu", stats.batch_events_processed);
-    log_info("平均事件处理时间: %.2f 微秒", stats.avg_event_processing_time);
-    log_info("最大事件处理时间: %.2f 微秒", stats.max_event_processing_time);
-    log_info("最小事件处理时间: %.2f 微秒", stats.min_event_processing_time);
-    log_info("处理器数量: %d", stats.handler_count);
-    log_info("活跃处理器数量: %d", stats.active_handlers);
-    log_info("错误次数: %lu", stats.error_count);
-    log_info("超时次数: %lu", stats.timeout_count);
-    log_info("锁竞争次数: %lu", stats.lock_contention);
-    log_info("================================");
+    log_info("=== Unified Event Loop Statistics ===");
+    log_info("Total events processed: %lu", stats.total_events_processed);
+    log_info("Batch events processed: %lu", stats.batch_events_processed);
+    log_info("Average event processing time: %.2f microseconds", stats.avg_event_processing_time);
+    log_info("Maximum event processing time: %.2f microseconds", stats.max_event_processing_time);
+    log_info("Minimum event processing time: %.2f microseconds", stats.min_event_processing_time);
+    log_info("Handler count: %d", stats.handler_count);
+    log_info("Active handler count: %d", stats.active_handlers);
+    log_info("Error count: %lu", stats.error_count);
+    log_info("Timeout count: %lu", stats.timeout_count);
+    log_info("Lock contention count: %lu", stats.lock_contention);
+    log_info("=====================================");
 }

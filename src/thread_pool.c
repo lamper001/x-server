@@ -1,5 +1,5 @@
 /**
- * 线程池实现模块
+ * Thread Pool Implementation Module
  */
 
 #include <stdio.h>
@@ -10,47 +10,47 @@
 #include "../include/thread_pool.h"
 #include "../include/logger.h"
 
-// 任务结构体
+// Task structure
 typedef struct {
-    void (*function)(void *);  // 任务函数
-    void *argument;            // 任务参数
+    void (*function)(void *);  // Task function
+    void *argument;            // Task argument
 } thread_pool_task_t;
 
-// 线程池结构体
+// Thread pool structure
 struct thread_pool {
-    pthread_mutex_t lock;           // 互斥锁
-    pthread_cond_t notify;          // 条件变量
-    pthread_t *threads;             // 工作线程数组
-    thread_pool_task_t *queue;      // 任务队列
-    int thread_count;               // 线程数量
-    int queue_size;                 // 队列大小
-    int head;                       // 队列头
-    int tail;                       // 队列尾
-    int count;                      // 当前任务数量
-    int shutdown;                   // 关闭标志
-    int started;                    // 已启动的线程数
+    pthread_mutex_t lock;           // Mutex lock
+    pthread_cond_t notify;          // Condition variable
+    pthread_t *threads;             // Worker threads array
+    thread_pool_task_t *queue;      // Task queue
+    int thread_count;               // Thread count
+    int queue_size;                 // Queue size
+    int head;                       // Queue head
+    int tail;                       // Queue tail
+    int count;                      // Current task count
+    int shutdown;                   // Shutdown flag
+    int started;                    // Started thread count
 };
 
-// 线程工作函数
+// Thread worker function
 static void *thread_worker(void *arg) {
     thread_pool_t *pool = (thread_pool_t *)arg;
     thread_pool_task_t task;
 
     while (1) {
-        // 获取任务
+        // Get task
         pthread_mutex_lock(&(pool->lock));
 
-        // 等待任务或关闭信号
+        // Wait for task or shutdown signal
         while ((pool->count == 0) && (!pool->shutdown)) {
             pthread_cond_wait(&(pool->notify), &(pool->lock));
         }
 
-        // 检查是否需要关闭线程
+        // Check if thread needs to be shut down
         if ((pool->shutdown == 1) && (pool->count == 0)) {
             break;
         }
 
-        // 获取任务
+        // Get task
         task.function = pool->queue[pool->head].function;
         task.argument = pool->queue[pool->head].argument;
         pool->head = (pool->head + 1) % pool->queue_size;
@@ -58,78 +58,78 @@ static void *thread_worker(void *arg) {
 
         pthread_mutex_unlock(&(pool->lock));
 
-        // 执行任务
+        // Execute task
         (*(task.function))(task.argument);
     }
 
-    // 线程退出
+    // Thread exit
     pool->started--;
     pthread_mutex_unlock(&(pool->lock));
     pthread_exit(NULL);
     return NULL;
 }
 
-// 创建线程池
+// Create thread pool
 thread_pool_t *thread_pool_create(int thread_count, int queue_size) {
     thread_pool_t *pool;
     int i;
 
-    // 检查参数
+    // Check parameters
     if (thread_count <= 0 || queue_size <= 0) {
         return NULL;
     }
 
-    // 分配内存
+    // Allocate memory
     pool = (thread_pool_t *)malloc(sizeof(thread_pool_t));
     if (pool == NULL) {
-        log_error("无法分配线程池内存");
+        log_error("Failed to allocate thread pool memory");
         return NULL;
     }
 
-    // 初始化线程池
+    // Initialize thread pool
     pool->thread_count = thread_count;
     pool->queue_size = queue_size;
     pool->head = pool->tail = pool->count = 0;
     pool->shutdown = pool->started = 0;
 
-    // 分配线程和任务队列内存
+    // Allocate thread and task queue memory
     pool->threads = (pthread_t *)malloc(sizeof(pthread_t) * thread_count);
     pool->queue = (thread_pool_task_t *)malloc(sizeof(thread_pool_task_t) * queue_size);
 
-    // 检查内存分配
+    // Check memory allocation
     if (pool->threads == NULL || pool->queue == NULL) {
-        log_error("无法分配线程池队列内存");
+        log_error("Failed to allocate thread pool queue memory");
         if (pool->threads) free(pool->threads);
         if (pool->queue) free(pool->queue);
         free(pool);
         return NULL;
     }
 
-    // 初始化互斥锁和条件变量
+    // Initialize mutex and condition variable
     if (pthread_mutex_init(&(pool->lock), NULL) != 0 ||
         pthread_cond_init(&(pool->notify), NULL) != 0) {
-        log_error("无法初始化线程池锁或条件变量");
+        log_error("Failed to initialize thread pool lock or condition variable");
         free(pool->threads);
         free(pool->queue);
         free(pool);
         return NULL;
     }
 
-    // 创建工作线程
+    // Create worker threads
     for (i = 0; i < thread_count; i++) {
         if (pthread_create(&(pool->threads[i]), NULL, thread_worker, (void*)pool) != 0) {
             thread_pool_destroy(pool, 0);
             return NULL;
         }
         pool->started++;
-        log_debug("线程池创建工作线程 %d", i);
+        log_debug("Thread pool created worker thread %d", i);
     }
 
-    log_info("线程池初始化成功，线程数: %d，队列大小: %d", thread_count, queue_size);
+    log_info("Thread pool initialized successfully, thread count: %d, queue size: %d", thread_count, queue_size);
     return pool;
 }
 
-// 添加任务到线程池
+// Add task to thread pool
 int thread_pool_add(thread_pool_t *pool, void (*function)(void *), void *argument) {
     int err = 0;
     int next;
@@ -138,37 +138,37 @@ int thread_pool_add(thread_pool_t *pool, void (*function)(void *), void *argumen
         return THREAD_POOL_INVALID;
     }
 
-    // 获取锁
+    // Acquire lock
     if (pthread_mutex_lock(&(pool->lock)) != 0) {
         return THREAD_POOL_LOCK_FAILURE;
     }
 
-    // 计算下一个可用位置
+    // Calculate next available position
     next = (pool->tail + 1) % pool->queue_size;
 
-    // 检查队列是否已满
+    // Check if queue is full
     if (pool->count == pool->queue_size) {
         err = THREAD_POOL_QUEUE_FULL;
-        log_warn("线程池队列已满");
+        log_warn("Thread pool queue is full");
     }
-    // 检查线程池是否已关闭
+    // Check if thread pool is shut down
     else if (pool->shutdown) {
         err = THREAD_POOL_SHUTDOWN;
     }
-    // 添加任务到队列
+    // Add task to queue
     else {
         pool->queue[pool->tail].function = function;
         pool->queue[pool->tail].argument = argument;
         pool->tail = next;
         pool->count++;
 
-        // 通知工作线程
+        // Notify worker threads
         if (pthread_cond_signal(&(pool->notify)) != 0) {
             err = THREAD_POOL_LOCK_FAILURE;
         }
     }
 
-    // 释放锁
+    // Release lock
     if (pthread_mutex_unlock(&(pool->lock)) != 0) {
         err = THREAD_POOL_LOCK_FAILURE;
     }
@@ -176,7 +176,7 @@ int thread_pool_add(thread_pool_t *pool, void (*function)(void *), void *argumen
     return err;
 }
 
-// 销毁线程池
+// Destroy thread pool
 int thread_pool_destroy(thread_pool_t *pool, int flags) {
     int i, err = 0;
 
@@ -184,27 +184,27 @@ int thread_pool_destroy(thread_pool_t *pool, int flags) {
         return THREAD_POOL_INVALID;
     }
 
-    // 获取锁
+    // Acquire lock
     if (pthread_mutex_lock(&(pool->lock)) != 0) {
         return THREAD_POOL_LOCK_FAILURE;
     }
 
-    // 检查线程池是否已关闭
+    // Check if thread pool is already shut down
     if (pool->shutdown) {
         err = THREAD_POOL_SHUTDOWN;
     }
     else {
-        // 设置关闭标志
+        // Set shutdown flag
         pool->shutdown = 1;
 
-        // 唤醒所有工作线程
+        // Wake up all worker threads
         if ((pthread_cond_broadcast(&(pool->notify)) != 0) ||
             (pthread_mutex_unlock(&(pool->lock)) != 0)) {
             err = THREAD_POOL_LOCK_FAILURE;
             return err;
         }
 
-        // 等待所有线程完成
+        // Wait for all threads to complete
         for (i = 0; i < pool->thread_count; i++) {
             if (pthread_join(pool->threads[i], NULL) != 0) {
                 err = THREAD_POOL_THREAD_FAILURE;
@@ -212,7 +212,7 @@ int thread_pool_destroy(thread_pool_t *pool, int flags) {
         }
     }
 
-    // 释放资源
+    // Release resources
     if (!err || flags) {
         pthread_mutex_destroy(&(pool->lock));
         pthread_cond_destroy(&(pool->notify));

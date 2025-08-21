@@ -1,5 +1,5 @@
 /**
- * Worker process管理模块实现
+ * Worker Process Management Module Implementation
  */
 
 #include <stdio.h>
@@ -28,30 +28,30 @@
 #include "../include/shared_memory.h"
 #include "../include/file_io_enhanced.h"
 
-// 全局Worker上下文
+// Global Worker context
 static worker_context_t *g_worker_ctx = NULL;
 
-// 全局连接池
+// Global connection pool
 static connection_pool_t *g_connection_pool = NULL;
 
-// 信号处理标志
+// Signal handling flags
 static volatile sig_atomic_t g_reload_config = 0;
 static volatile sig_atomic_t g_shutdown_worker = 0;
 static volatile sig_atomic_t g_terminate_worker = 0;
 
-// 前向声明
+// Forward declarations
 static void worker_signal_handler(int sig);
 static int setup_worker_signals(void);
 static void worker_accept_callback(int listen_fd, void *arg);
 
 /**
- * Worker process信号处理器
+ * Worker process signal handler
  */
 static void worker_signal_handler(int sig) {
     switch (sig) {
         case SIGHUP:
             g_reload_config = 1;
-            log_info("Worker process %d 接收到SIGHUP信号，准备reload configuration", getpid());
+            log_info("Worker process %d received SIGHUP signal, preparing to reload configuration", getpid());
             break;
             
         case SIGTERM:
@@ -71,7 +71,7 @@ static void worker_signal_handler(int sig) {
 }
 
 /**
- * 设置Worker process信号处理
+ * Set up Worker process signal handling
  */
 static int setup_worker_signals(void) {
     struct sigaction sa;
@@ -84,7 +84,7 @@ static int setup_worker_signals(void) {
     if (sigaction(SIGHUP, &sa, NULL) == -1 ||
         sigaction(SIGTERM, &sa, NULL) == -1 ||
         sigaction(SIGQUIT, &sa, NULL) == -1) {
-        log_error("设置Worker process信号处理器失败: %s", strerror(errno));
+        log_error("Failed to set up Worker process signal handler: %s", strerror(errno));
         return -1;
     }
     
@@ -95,7 +95,7 @@ static int setup_worker_signals(void) {
 }
 
 /**
- * Worker process接受连接回调函数
+ * Worker process accept connection callback function
  */
 static void worker_accept_callback(int listen_fd, void *arg) {
     (void)arg; // avoid unused parameter warning
@@ -161,7 +161,7 @@ static void worker_accept_callback(int listen_fd, void *arg) {
     }
     
     if (accepted_count > 0) {
-        log_debug("Worker process %d Batch accept connections completed, accepted connections", getpid(), accepted_count);
+        log_debug("Worker process %d Batch accept connections completed, accepted %d connections", getpid(), accepted_count);
     }
 }
 
@@ -185,14 +185,14 @@ void unified_connection_callback(int client_fd, void *arg) {
 }
 
 /**
- * 重新加载Worker process配置
+ * Reload Worker process configuration
  */
 static int worker_reload_config(void) {
-    log_info("Worker process %d 开始reload configuration", getpid());
+    log_info("Worker process %d starting configuration reload", getpid());
     
     g_worker_ctx->state = WORKER_RELOADING;
     
-    // 从共享内存获取新配置
+    // Get new configuration from shared memory
     config_t *new_config = get_shared_config();
     if (new_config == NULL) {
         log_error("Worker process %d Failed to get configuration from shared memory", getpid());
@@ -200,7 +200,7 @@ static int worker_reload_config(void) {
         return -1;
     }
     
-    // 更新配置
+    // Update configuration
     if (g_worker_ctx->config != NULL) {
         free_config(g_worker_ctx->config);
     }
@@ -213,40 +213,40 @@ static int worker_reload_config(void) {
 }
 
 /**
- * Worker processMain function
+ * Worker process main function
  */
 int worker_process_run(int worker_id, int listen_fd, config_t *config) {
-    // 分配Worker上下文
+    // Allocate Worker context
     g_worker_ctx = (worker_context_t *)malloc(sizeof(worker_context_t));
     if (g_worker_ctx == NULL) {
-        log_error("分配Worker process上下文内存失败");
+        log_error("Failed to allocate Worker process context memory");
         return -1;
     }
     
     memset(g_worker_ctx, 0, sizeof(worker_context_t));
     
-    // 初始化Worker上下文
+    // Initialize Worker context
     g_worker_ctx->worker_id = worker_id;
     g_worker_ctx->worker_pid = getpid();
     g_worker_ctx->state = WORKER_STARTING;
     g_worker_ctx->listen_fd = listen_fd;
     g_worker_ctx->start_time = time(NULL);
     
-    // 初始化原子变量
+    // Initialize atomic variables
     atomic_init(&g_worker_ctx->requests_processed, 0);
     atomic_init(&g_worker_ctx->bytes_sent, 0);
     atomic_init(&g_worker_ctx->bytes_received, 0);
     atomic_init(&g_worker_ctx->active_connections, 0);
     atomic_init(&g_worker_ctx->total_connections, 0);
     
-    // 初始化统计互斥锁
+    // Initialize statistics mutex
     if (pthread_mutex_init(&g_worker_ctx->stats_mutex, NULL) != 0) {
         log_error("Worker process %d Failed to initialize statistics mutex", getpid());
         free(g_worker_ctx);
         return -1;
     }
     
-    // 复制配置
+    // Copy configuration
     g_worker_ctx->config = duplicate_config(config);
     if (g_worker_ctx->config == NULL) {
         log_error("Worker process %d Failed to copy configuration", getpid());
@@ -254,27 +254,27 @@ int worker_process_run(int worker_id, int listen_fd, config_t *config) {
         return -1;
     }
     
-    // 设置信号处理
+    // Set up signal handling
     if (setup_worker_signals() != 0) {
         free_config(g_worker_ctx->config);
         free(g_worker_ctx);
         return -1;
     }
     
-    // Worker process环境变量应该已经在fork时设置，这里再次确认
+    // Worker process environment variables should already be set during fork, confirm here
     char worker_env[32];
     snprintf(worker_env, sizeof(worker_env), "%d", worker_id);
     if (getenv("WORKER_PROCESS_ID") == NULL) {
         setenv("WORKER_PROCESS_ID", worker_env, 1);
     }
     
-    // Worker process继承Master进程的日志系统配置，无需重新初始化
+    // Worker process inherits Master process logging system configuration, no need to reinitialize
     // Just need to simply record startup information
-    log_info("Worker process %d 启动，PID: %d", worker_id, getpid());
+    log_info("Worker process %d starting, PID: %d", worker_id, getpid());
     
     // Initialize connection management module - use memory pool size from configuration
     size_t pool_size = g_worker_ctx->config->memory_pool_size > 0 ? 
-                      g_worker_ctx->config->memory_pool_size : 1024 * 1024 * 100; // 默认100MB
+                      g_worker_ctx->config->memory_pool_size : 1024 * 1024 * 100; // Default 100MB
     if (init_connection_manager(pool_size) != 0) {
         log_error("Worker process %d Failed to initialize connection management module", getpid());
         free_config(g_worker_ctx->config);
@@ -282,7 +282,7 @@ int worker_process_run(int worker_id, int listen_fd, config_t *config) {
         return -1;
     }
     
-    // 初始化连接池
+    // Initialize connection pool
     connection_pool_config_t pool_config = connection_pool_load_config(g_worker_ctx->config);
     g_connection_pool = connection_pool_create(&pool_config);
     if (g_connection_pool == NULL) {
@@ -299,18 +299,18 @@ int worker_process_run(int worker_id, int listen_fd, config_t *config) {
     
     // Initialize enhanced file I/O module
     file_io_config_t file_io_config = {
-        .cache_size = 100,                    // 100MB缓存
-        .max_file_size = 50,                  // 最大50MB文件
-        .enable_mmap = 1,                     // 启用mmap
-        .enable_async = 0,                    // 暂时禁用异步I/O
-        .enable_sendfile = 1,                 // 启用sendfile
-        .cache_cleanup_interval = 300,        // 5分钟清理间隔
-        .read_buffer_size = 8192,             // 8KB读取缓冲区
-        .write_buffer_size = 8192             // 8KB写入缓冲区
+        .cache_size = 100,                    // 100MB cache
+        .max_file_size = 50,                  // Maximum 50MB file
+        .enable_mmap = 1,                     // Enable mmap
+        .enable_async = 0,                    // Temporarily disable async I/O
+        .enable_sendfile = 1,                 // Enable sendfile
+        .cache_cleanup_interval = 300,        // 5 minute cleanup interval
+        .read_buffer_size = 8192,             // 8KB read buffer
+        .write_buffer_size = 8192             // 8KB write buffer
     };
     
     if (file_io_enhanced_init(&file_io_config) != 0) {
-        log_warn("Worker process %d Initialize enhanced file I/O module失败，将使用标准文件处理", getpid());
+        log_warn("Worker process %d Failed to initialize enhanced file I/O module, will use standard file processing", getpid());
     } else {
         log_info("Worker process %d Enhanced file I/O module initialization successful", getpid());
     }
@@ -328,7 +328,7 @@ int worker_process_run(int worker_id, int listen_fd, config_t *config) {
         return -1;
     }
     
-    // 将监听套接字添加到统一事件循环
+    // Add listen socket to unified event loop
     if (event_loop_add_handler(g_worker_ctx->event_loop, listen_fd, EVENT_READ, 
                               unified_worker_accept_callback, NULL, NULL) != 0) {
         log_error("Worker process %d Failed to add listen socket to unified event loop", getpid());
@@ -339,7 +339,7 @@ int worker_process_run(int worker_id, int listen_fd, config_t *config) {
         return -1;
     }
     
-    // 启动统一事件循环
+    // Start unified event loop
     if (event_loop_start(g_worker_ctx->event_loop) != 0) {
         log_error("Worker process %d Failed to start unified event loop", getpid());
         event_loop_destroy(g_worker_ctx->event_loop);
@@ -351,7 +351,7 @@ int worker_process_run(int worker_id, int listen_fd, config_t *config) {
     
     g_worker_ctx->state = WORKER_RUNNING;
     
-    // 设置Worker process标题
+    // Set Worker process title
     setproctitle("x-server: worker process");
     
     log_info("Worker process %d Start running", getpid());
@@ -360,7 +360,7 @@ int worker_process_run(int worker_id, int listen_fd, config_t *config) {
     int memory_cleanup_counter = 0;
     const int MEMORY_CLEANUP_INTERVAL = 1000; // clean up memory every loops
     
-    // Worker process主循环
+    // Worker process main loop
     while (g_worker_ctx->state != WORKER_STOPPED) {
         // Check signal flags
         if (g_reload_config) {
@@ -389,7 +389,7 @@ int worker_process_run(int worker_id, int listen_fd, config_t *config) {
             extern int compress_connection_pool(void);
             int freed_blocks = compress_connection_pool();
             if (freed_blocks > 0) {
-                log_info("Worker process %d Periodic memory cleanup完成，释放了 %d 个内存块", getpid(), freed_blocks);
+                log_info("Worker process %d Periodic memory cleanup completed, freed %d memory blocks", getpid(), freed_blocks);
             }
             memory_cleanup_counter = 0;
         }
@@ -420,7 +420,7 @@ int worker_process_run(int worker_id, int listen_fd, config_t *config) {
     cleanup_connection_manager();
     free_config(g_worker_ctx->config);
     
-    log_info("Worker process %d Exit, processed requests, sent bytes: %lu", 
+    log_info("Worker process %d Exit, processed %lu requests, sent %lu bytes", 
              getpid(), atomic_load(&g_worker_ctx->requests_processed), 
              atomic_load(&g_worker_ctx->bytes_sent));
     
@@ -434,14 +434,14 @@ int worker_process_run(int worker_id, int listen_fd, config_t *config) {
 }
 
 /**
- * 获取Worker process上下文
+ * Get Worker process context
  */
 worker_context_t *get_worker_context(void) {
     return g_worker_ctx;
 }
 
 /**
- * Worker process优雅关闭
+ * Worker process graceful shutdown
  */
 void worker_graceful_shutdown(void) {
     if (g_worker_ctx == NULL) {
@@ -450,10 +450,10 @@ void worker_graceful_shutdown(void) {
     
     g_worker_ctx->state = WORKER_STOPPING;
     
-    // 停止Accept new connection
+    // Stop accepting new connections
     event_loop_del_handler(g_worker_ctx->event_loop, g_worker_ctx->listen_fd);
     
-    // Wait for existing connections to complete processing (wait up to seconds)
+    // Wait for existing connections to complete processing (wait up to 30 seconds)
     time_t start_time = time(NULL);
     while (g_worker_ctx->active_connections > 0 && 
            (time(NULL) - start_time) < 30) {
@@ -461,7 +461,7 @@ void worker_graceful_shutdown(void) {
     }
     
     if (g_worker_ctx->active_connections > 0) {
-        log_warn("Worker process %d Still have active connections, force close", 
+        log_warn("Worker process %d Still have %lu active connections, force close", 
                  getpid(), g_worker_ctx->active_connections);
     }
     
@@ -505,14 +505,14 @@ void decrement_connection_count_safe(void) {
 }
 
 /**
- * 获取Worker process的连接池
+ * Get Worker process connection pool
  */
 connection_pool_t *get_worker_connection_pool(void) {
     return g_connection_pool;
 }
 
 /**
- * 内部函数：获取Worker process的连接池
+ * Internal function: Get Worker process connection pool
  */
 connection_pool_t *get_worker_connection_pool_internal(void) {
     return g_connection_pool;

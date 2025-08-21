@@ -1,6 +1,6 @@
 /**
- * 连接池优化模块实现
- * 第四阶段：连接处理优化
+ * Connection Pool Optimization Module Implementation
+ * Phase 4: Connection Processing Optimization
  */
 
 #include <stdio.h>
@@ -21,38 +21,38 @@
 #include "../include/logger.h"
 #include "../include/memory_pool.h"
 
-// 前向声明，避免循环依赖
+// Forward declaration to avoid circular dependency
 struct connection;
 
-// 连接池内部结构
+// Connection pool internal structure
 struct connection_pool {
-    connection_pool_config_t config;           // 连接池配置
-    connection_pool_stats_t stats;             // 统计信息
+    connection_pool_config_t config;           // Connection pool configuration
+    connection_pool_stats_t stats;             // Statistics
     
-    // 连接管理
-    connection_t **connections;                // 连接数组
-    int connection_count;                      // 当前连接数
-    int connection_capacity;                   // 连接数组容量
+    // Connection management
+    connection_t **connections;                // Connection array
+    int connection_count;                      // Current connection count
+    int connection_capacity;                   // Connection array capacity
     
-    // 空闲连接管理
-    connection_t **idle_connections;           // 空闲连接数组
-    int idle_count;                           // 空闲连接数
-    int idle_capacity;                        // 空闲连接数组容量
+    // Idle connection management
+    connection_t **idle_connections;           // Idle connection array
+    int idle_count;                           // Idle connection count
+    int idle_capacity;                        // Idle connection array capacity
     
-    // 线程安全
-    pthread_mutex_t pool_mutex;               // 连接池锁
-    pthread_mutex_t idle_mutex;               // 空闲连接锁
-    pthread_mutex_t stats_mutex;              // 统计信息锁
+    // Thread safety
+    pthread_mutex_t pool_mutex;               // Connection pool lock
+    pthread_mutex_t idle_mutex;               // Idle connection lock
+    pthread_mutex_t stats_mutex;              // Statistics lock
     
-    // 清理线程
-    pthread_t cleanup_thread;                 // 清理线程
-    int cleanup_running;                      // 清理线程运行标志
+    // Cleanup thread
+    pthread_t cleanup_thread;                 // Cleanup thread
+    int cleanup_running;                      // Cleanup thread running flag
     
-    // 内存池
-    void *memory_pool;                        // 内存池
+    // Memory pool
+    void *memory_pool;                        // Memory pool
 };
 
-// 连接池清理线程函数
+// Connection pool cleanup thread function
 static void *cleanup_thread_func(void *arg) {
     connection_pool_t *pool = (connection_pool_t *)arg;
     
@@ -67,44 +67,44 @@ static void *cleanup_thread_func(void *arg) {
     return NULL;
 }
 
-// 创建连接池
+// Create connection pool
 connection_pool_t *connection_pool_create(const connection_pool_config_t *config) {
     connection_pool_t *pool = malloc(sizeof(connection_pool_t));
     if (!pool) {
-        log_error("创建连接池失败：内存分配失败");
+        log_error("Failed to create connection pool: memory allocation failed");
         return NULL;
     }
     
-    // 初始化配置
+    // Initialize configuration
     memcpy(&pool->config, config, sizeof(connection_pool_config_t));
     
-    // 初始化统计信息
+    // Initialize statistics
     memset(&pool->stats, 0, sizeof(connection_pool_stats_t));
     
-    // 初始化连接数组
+    // Initialize connection array
     pool->connection_capacity = config->max_connections;
     pool->connections = calloc(pool->connection_capacity, sizeof(connection_t*));
     if (!pool->connections) {
-        log_error("创建连接池失败：连接数组分配失败");
+        log_error("Failed to create connection pool: connection array allocation failed");
         free(pool);
         return NULL;
     }
     pool->connection_count = 0;
     
-    // 初始化空闲连接数组
+    // Initialize idle connection array
     pool->idle_capacity = config->max_idle_connections;
     pool->idle_connections = calloc(pool->idle_capacity, sizeof(connection_t*));
     if (!pool->idle_connections) {
-        log_error("创建连接池失败：空闲连接数组分配失败");
+        log_error("Failed to create connection pool: idle connection array allocation failed");
         free(pool->connections);
         free(pool);
         return NULL;
     }
     pool->idle_count = 0;
     
-    // 初始化锁
+    // Initialize locks
     if (pthread_mutex_init(&pool->pool_mutex, NULL) != 0) {
-        log_error("创建连接池失败：初始化连接池锁失败");
+        log_error("Failed to create connection pool: failed to initialize pool lock");
         free(pool->idle_connections);
         free(pool->connections);
         free(pool);
@@ -112,7 +112,7 @@ connection_pool_t *connection_pool_create(const connection_pool_config_t *config
     }
     
     if (pthread_mutex_init(&pool->idle_mutex, NULL) != 0) {
-        log_error("创建连接池失败：初始化空闲连接锁失败");
+        log_error("Failed to create connection pool: failed to initialize idle connection lock");
         pthread_mutex_destroy(&pool->pool_mutex);
         free(pool->idle_connections);
         free(pool->connections);
@@ -121,7 +121,7 @@ connection_pool_t *connection_pool_create(const connection_pool_config_t *config
     }
     
     if (pthread_mutex_init(&pool->stats_mutex, NULL) != 0) {
-        log_error("创建连接池失败：初始化统计锁失败");
+        log_error("Failed to create connection pool: failed to initialize statistics lock");
         pthread_mutex_destroy(&pool->idle_mutex);
         pthread_mutex_destroy(&pool->pool_mutex);
         free(pool->idle_connections);
@@ -130,16 +130,16 @@ connection_pool_t *connection_pool_create(const connection_pool_config_t *config
         return NULL;
     }
     
-    // 初始化内存池 - 使用标准内存池函数
+    // Initialize memory pool - use standard memory pool functions
     pool->memory_pool = create_memory_pool(1024 * 1024); // 1MB
     if (!pool->memory_pool) {
-        log_warn("创建连接池内存池失败，使用系统内存分配");
+        log_warn("Failed to create connection pool memory pool, using system memory allocation");
     }
     
-    // 启动清理线程
+    // Start cleanup thread
     pool->cleanup_running = 1;
     if (pthread_create(&pool->cleanup_thread, NULL, cleanup_thread_func, pool) != 0) {
-        log_error("创建连接池失败：启动清理线程失败");
+        log_error("Failed to create connection pool: failed to start cleanup thread");
         pthread_mutex_destroy(&pool->stats_mutex);
         pthread_mutex_destroy(&pool->idle_mutex);
         pthread_mutex_destroy(&pool->pool_mutex);
@@ -152,7 +152,7 @@ connection_pool_t *connection_pool_create(const connection_pool_config_t *config
         return NULL;
     }
     
-    log_info("连接池创建成功：最大连接数=%d, 最大空闲连接数=%d", 
+    log_info("Connection pool created successfully: max connections=%d, max idle connections=%d", 
              config->max_connections, config->max_idle_connections);
     
     return pool;
@@ -164,11 +164,11 @@ void connection_pool_destroy(connection_pool_t *pool) {
         return;
     }
     
-    // 停止清理线程
+    // Stop cleanup thread
     pool->cleanup_running = 0;
     pthread_join(pool->cleanup_thread, NULL);
     
-    // 关闭所有连接
+    // Close all connections
     pthread_mutex_lock(&pool->pool_mutex);
     for (int i = 0; i < pool->connection_count; i++) {
         if (pool->connections[i]) {
@@ -178,26 +178,26 @@ void connection_pool_destroy(connection_pool_t *pool) {
     }
     pthread_mutex_unlock(&pool->pool_mutex);
     
-    // 销毁锁
+    // Destroy locks
     pthread_mutex_destroy(&pool->stats_mutex);
     pthread_mutex_destroy(&pool->idle_mutex);
     pthread_mutex_destroy(&pool->pool_mutex);
     
-    // 销毁内存池
+    // Destroy memory pool
     if (pool->memory_pool) {
         destroy_memory_pool(pool->memory_pool);
     }
     
-    // 释放数组
+    // Free arrays
     free(pool->idle_connections);
     free(pool->connections);
     
-    log_info("连接池销毁完成");
+    log_info("Connection pool destruction completed");
     
     free(pool);
 }
 
-// 从连接池获取连接
+// Get connection from connection pool
 connection_t *connection_pool_get_connection(connection_pool_t *pool, int fd, 
                                            void *loop, int is_enhanced_loop,
                                            config_t *config, struct sockaddr_in *client_addr) {
@@ -207,41 +207,41 @@ connection_t *connection_pool_get_connection(connection_pool_t *pool, int fd,
     
     connection_t *conn = NULL;
     
-    // 尝试从空闲连接池获取
+    // Try to get from idle connection pool
     if (pool->config.enable_connection_reuse) {
         pthread_mutex_lock(&pool->idle_mutex);
         
         if (pool->idle_count > 0) {
-            // 获取最后一个空闲连接
+            // Get the last idle connection
             conn = pool->idle_connections[--pool->idle_count];
             pool->idle_connections[pool->idle_count] = NULL;
             
-            // 更新统计信息
+            // Update statistics
             pthread_mutex_lock(&pool->stats_mutex);
             atomic_fetch_add(&pool->stats.reused_connections, 1);
             atomic_fetch_add(&pool->stats.idle_connections, -1);
             atomic_fetch_add(&pool->stats.active_connections, 1);
             pthread_mutex_unlock(&pool->stats_mutex);
             
-            log_debug("复用空闲连接：fd=%d", (int)(long)conn);
+            log_debug("Reused idle connection: fd=%d", (int)(long)conn);
         }
         
         pthread_mutex_unlock(&pool->idle_mutex);
     }
     
-    // 如果没有可复用的连接，创建新连接
+    // If no reusable connection, create new connection
     if (!conn) {
         pthread_mutex_lock(&pool->pool_mutex);
         
-        // 检查连接数限制
+        // Check connection limit
         if (pool->connection_count >= pool->config.max_connections) {
-            log_warn("连接池已满，无法创建新连接：当前=%d, 最大=%d", 
+            log_warn("Connection pool is full, cannot create new connection: current=%d, max=%d", 
                      pool->connection_count, pool->config.max_connections);
             pthread_mutex_unlock(&pool->pool_mutex);
             return NULL;
         }
         
-        // 创建新连接
+        // Create new connection
         if (is_enhanced_loop) {
             conn = connection_create_enhanced(fd, (event_loop_t*)loop, config, client_addr);
         } else {
@@ -249,17 +249,17 @@ connection_t *connection_pool_get_connection(connection_pool_t *pool, int fd,
         }
         
         if (conn) {
-            // 添加到连接数组
+            // Add to connection array
             pool->connections[pool->connection_count++] = conn;
             
-            // 更新统计信息
+            // Update statistics
             pthread_mutex_lock(&pool->stats_mutex);
             atomic_fetch_add(&pool->stats.created_connections, 1);
             atomic_fetch_add(&pool->stats.total_connections, 1);
             atomic_fetch_add(&pool->stats.active_connections, 1);
             pthread_mutex_unlock(&pool->stats_mutex);
             
-            log_debug("创建新连接：fd=%d, 当前连接数=%d, 增强版=%d", fd, pool->connection_count, is_enhanced_loop);
+            log_debug("Created new connection: fd=%d, current connections=%d, enhanced=%d", fd, pool->connection_count, is_enhanced_loop);
         }
         
         pthread_mutex_unlock(&pool->pool_mutex);
@@ -268,13 +268,13 @@ connection_t *connection_pool_get_connection(connection_pool_t *pool, int fd,
     return conn;
 }
 
-// 将连接归还到连接池
+// Return connection to connection pool
 void connection_pool_return_connection(connection_pool_t *pool, connection_t *conn) {
     if (!pool || !conn) {
         return;
     }
     
-    // 检查连接是否可以复用 - 暂时简化逻辑
+    // Check if connection can be reused - simplified logic for now
     if (pool->config.enable_connection_reuse && 
         pool->idle_count < pool->config.max_idle_connections) {
         
@@ -283,26 +283,26 @@ void connection_pool_return_connection(connection_pool_t *pool, connection_t *co
         if (pool->idle_count < pool->idle_capacity) {
             pool->idle_connections[pool->idle_count++] = conn;
             
-            // 更新统计信息
+            // Update statistics
             pthread_mutex_lock(&pool->stats_mutex);
             atomic_fetch_add(&pool->stats.idle_connections, 1);
             atomic_fetch_add(&pool->stats.active_connections, -1);
             pthread_mutex_unlock(&pool->stats_mutex);
             
-            log_debug("连接归还到空闲池：conn=%p, 空闲连接数=%d", conn, pool->idle_count);
+            log_debug("Connection returned to idle pool: conn=%p, idle connections=%d", conn, pool->idle_count);
         } else {
-            // 空闲池已满，直接关闭连接
+            // Idle pool is full, close connection directly
             connection_pool_close_connection(pool, conn);
         }
         
         pthread_mutex_unlock(&pool->idle_mutex);
     } else {
-        // 不能复用，直接关闭
+        // Cannot reuse, close directly
         connection_pool_close_connection(pool, conn);
     }
 }
 
-// 关闭连接（从池中移除）
+// Close connection (remove from pool)
 void connection_pool_close_connection(connection_pool_t *pool, connection_t *conn) {
     if (!pool || !conn) {
         return;
@@ -310,10 +310,10 @@ void connection_pool_close_connection(connection_pool_t *pool, connection_t *con
     
     pthread_mutex_lock(&pool->pool_mutex);
     
-    // 从连接数组中移除
+    // Remove from connection array
     for (int i = 0; i < pool->connection_count; i++) {
         if (pool->connections[i] == conn) {
-            // 移动后面的连接
+            // Move subsequent connections
             for (int j = i; j < pool->connection_count - 1; j++) {
                 pool->connections[j] = pool->connections[j + 1];
             }
@@ -322,11 +322,11 @@ void connection_pool_close_connection(connection_pool_t *pool, connection_t *con
         }
     }
     
-    // 从空闲连接数组中移除
+    // Remove from idle connection array
     pthread_mutex_lock(&pool->idle_mutex);
     for (int i = 0; i < pool->idle_count; i++) {
         if (pool->idle_connections[i] == conn) {
-            // 移动后面的连接
+            // Move subsequent connections
             for (int j = i; j < pool->idle_count - 1; j++) {
                 pool->idle_connections[j] = pool->idle_connections[j + 1];
             }
@@ -336,7 +336,7 @@ void connection_pool_close_connection(connection_pool_t *pool, connection_t *con
     }
     pthread_mutex_unlock(&pool->idle_mutex);
     
-    // 更新统计信息
+    // Update statistics
     pthread_mutex_lock(&pool->stats_mutex);
     atomic_fetch_add(&pool->stats.closed_connections, 1);
     atomic_fetch_add(&pool->stats.active_connections, -1);
@@ -344,13 +344,13 @@ void connection_pool_close_connection(connection_pool_t *pool, connection_t *con
     
     pthread_mutex_unlock(&pool->pool_mutex);
     
-    // 销毁连接
+    // Destroy connection
     connection_destroy(conn);
     
-    log_debug("连接已关闭：conn=%p, 当前连接数=%d", conn, pool->connection_count);
+    log_debug("Connection closed: conn=%p, current connections=%d", conn, pool->connection_count);
 }
 
-// 获取连接池统计信息
+// Get connection pool statistics
 void connection_pool_get_stats(connection_pool_t *pool, connection_pool_stats_t *stats) {
     if (!pool || !stats) {
         return;
@@ -361,7 +361,7 @@ void connection_pool_get_stats(connection_pool_t *pool, connection_pool_stats_t 
     pthread_mutex_unlock(&pool->stats_mutex);
 }
 
-// 重置连接池统计信息
+// Reset connection pool statistics
 void connection_pool_reset_stats(connection_pool_t *pool) {
     if (!pool) {
         return;
@@ -372,7 +372,7 @@ void connection_pool_reset_stats(connection_pool_t *pool) {
     pthread_mutex_unlock(&pool->stats_mutex);
 }
 
-// 打印连接池统计信息
+// Print connection pool statistics
 void connection_pool_print_stats(connection_pool_t *pool) {
     if (!pool) {
         return;
@@ -381,23 +381,23 @@ void connection_pool_print_stats(connection_pool_t *pool) {
     connection_pool_stats_t stats;
     connection_pool_get_stats(pool, &stats);
     
-    log_info("=== 连接池统计信息 ===");
-    log_info("总连接数: %d", atomic_load(&stats.total_connections));
-    log_info("活跃连接数: %d", atomic_load(&stats.active_connections));
-    log_info("空闲连接数: %d", atomic_load(&stats.idle_connections));
-    log_info("复用连接数: %d", atomic_load(&stats.reused_connections));
-    log_info("新建连接数: %d", atomic_load(&stats.created_connections));
-    log_info("关闭连接数: %d", atomic_load(&stats.closed_connections));
-    log_info("超时连接数: %d", atomic_load(&stats.timeout_connections));
-    log_info("总请求数: %lu", stats.total_requests);
-    log_info("总读取字节数: %lu", stats.total_bytes_read);
-    log_info("总写入字节数: %lu", stats.total_bytes_written);
-    log_info("平均连接生命周期: %.2f秒", stats.avg_connection_lifetime);
-    log_info("平均每连接请求数: %.2f", stats.avg_requests_per_conn);
+    log_info("=== Connection Pool Statistics ===");
+    log_info("Total connections: %d", atomic_load(&stats.total_connections));
+    log_info("Active connections: %d", atomic_load(&stats.active_connections));
+    log_info("Idle connections: %d", atomic_load(&stats.idle_connections));
+    log_info("Reused connections: %d", atomic_load(&stats.reused_connections));
+    log_info("Created connections: %d", atomic_load(&stats.created_connections));
+    log_info("Closed connections: %d", atomic_load(&stats.closed_connections));
+    log_info("Timeout connections: %d", atomic_load(&stats.timeout_connections));
+    log_info("Total requests: %lu", stats.total_requests);
+    log_info("Total bytes read: %lu", stats.total_bytes_read);
+    log_info("Total bytes written: %lu", stats.total_bytes_written);
+    log_info("Average connection lifetime: %.2f seconds", stats.avg_connection_lifetime);
+    log_info("Average requests per connection: %.2f", stats.avg_requests_per_conn);
     log_info("======================");
 }
 
-// 清理空闲连接
+// Clean up idle connections
 int connection_pool_cleanup_idle(connection_pool_t *pool) {
     if (!pool) {
         return 0;
@@ -410,18 +410,18 @@ int connection_pool_cleanup_idle(connection_pool_t *pool) {
     
     for (int i = pool->idle_count - 1; i >= 0; i--) {
         connection_t *conn = pool->idle_connections[i];
-        if (conn && (now - 0) > pool->config.idle_timeout) { // 暂时简化，使用固定时间
-            // 移除超时的空闲连接
+        if (conn && (now - 0) > pool->config.idle_timeout) { // Simplified for now, using fixed time
+            // Remove timed out idle connections
             for (int j = i; j < pool->idle_count - 1; j++) {
                 pool->idle_connections[j] = pool->idle_connections[j + 1];
             }
             pool->idle_connections[--pool->idle_count] = NULL;
             
-            // 关闭连接
+            // Close connection
             connection_pool_close_connection(pool, conn);
             cleaned++;
             
-            log_debug("清理超时空闲连接：conn=%p, 空闲时间=%ld秒", 
+            log_debug("Cleaned up timed out idle connection: conn=%p, idle time=%ld seconds", 
                       conn, now - 0);
         }
     }
@@ -429,13 +429,13 @@ int connection_pool_cleanup_idle(connection_pool_t *pool) {
     pthread_mutex_unlock(&pool->idle_mutex);
     
     if (cleaned > 0) {
-        log_info("连接池清理完成：清理了 %d 个超时空闲连接", cleaned);
+        log_info("Connection pool cleanup completed: cleaned %d timed out idle connections", cleaned);
     }
     
     return cleaned;
 }
 
-// 设置连接池配置
+// Set connection pool configuration
 int connection_pool_set_config(connection_pool_t *pool, const connection_pool_config_t *config) {
     if (!pool || !config) {
         return -1;
@@ -445,11 +445,11 @@ int connection_pool_set_config(connection_pool_t *pool, const connection_pool_co
     memcpy(&pool->config, config, sizeof(connection_pool_config_t));
     pthread_mutex_unlock(&pool->pool_mutex);
     
-    log_info("连接池配置已更新");
+    log_info("Connection pool configuration updated");
     return 0;
 }
 
-// 获取连接池配置
+// Get connection pool configuration
 void connection_pool_get_config(connection_pool_t *pool, connection_pool_config_t *config) {
     if (!pool || !config) {
         return;
@@ -460,12 +460,12 @@ void connection_pool_get_config(connection_pool_t *pool, connection_pool_config_
     pthread_mutex_unlock(&pool->pool_mutex);
 }
 
-// 从Config file中加载连接池配置
+// Load connection pool configuration from Config file
 connection_pool_config_t connection_pool_load_config(const config_t *config) {
     connection_pool_config_t pool_config = {0};
     
     if (!config) {
-        // 使用默认配置
+        // Use default configuration
         pool_config.max_connections = 10000;
         pool_config.min_idle_connections = 10;
         pool_config.max_idle_connections = 1000;
@@ -479,17 +479,17 @@ connection_pool_config_t connection_pool_load_config(const config_t *config) {
         return pool_config;
     }
     
-    // 从服务器配置中加载
+    // Load from server configuration
     pool_config.max_connections = config->max_connections;
-    pool_config.min_idle_connections = config->worker_connections / 10; // 10%作为最小空闲
-    pool_config.max_idle_connections = config->worker_connections / 2;  // 50%作为最大空闲
+    pool_config.min_idle_connections = config->worker_connections / 10; // 10% as minimum idle
+    pool_config.max_idle_connections = config->worker_connections / 2;  // 50% as maximum idle
     pool_config.connection_timeout = config->connection_timeout;
-    pool_config.idle_timeout = config->keepalive_timeout * 2; // 空闲超时是keepalive的2倍
+    pool_config.idle_timeout = config->keepalive_timeout * 2; // Idle timeout is 2x keepalive timeout
     pool_config.keepalive_timeout = config->keepalive_timeout;
-    pool_config.max_requests_per_conn = 1000; // 默认值
-    pool_config.enable_connection_reuse = 1;   // 默认启用
-    pool_config.enable_connection_pooling = 1; // 默认启用
-    pool_config.pool_cleanup_interval = 30;    // 30秒清理一次
+    pool_config.max_requests_per_conn = 1000; // Default value
+    pool_config.enable_connection_reuse = 1;   // Enable by default
+    pool_config.enable_connection_pooling = 1; // Enable by default
+    pool_config.pool_cleanup_interval = 30;    // Clean up every 30 seconds
     
     return pool_config;
 } 
